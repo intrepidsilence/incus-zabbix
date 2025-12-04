@@ -1,0 +1,27 @@
+# Sensitive files - certificates and keys
+*.crt
+*.key
+*.pem
+
+# Import script with API tokens
+import_template.py
+
+# Reference templates (not part of this project)
+reference_template.yaml
+nginx_http_template.yaml
+rabbitmq_template.yaml
+incus_prometheus_ref.yaml
+
+# Test files
+test_*.yaml
+
+# Planning documents (internal)
+PLAN.md
+
+# Editor and OS files
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

@@ -1,0 +1,2456 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: d48b44fdc11b4daca246c021a024f835
+      name: Templates/Virtualization
+  templates:
+    - uuid: 54f0f9bb9673451c99fff89dca36080e
+      template: 'Incus Cluster by HTTP'
+      name: 'Incus Cluster by HTTP'
+      description: |
+        Comprehensive monitoring template for Incus container and VM clusters.
+        
+        Features:
+        - Auto-discovery of cluster members, instances, storage, networks
+        - Hybrid data collection: REST API + Prometheus metrics
+        - Multi-project support
+        - TLS client certificate authentication
+        - Cluster failover support
+        
+        Requirements:
+        - Incus 6.0+ with REST API enabled
+        - TLS client certificate configured
+        - Network access from Zabbix server/proxy to Incus API (default port 8443)
+        
+        Setup:
+        1. Generate TLS client certificate
+        2. Add certificate to Incus trust store
+        3. Copy certificates to Zabbix server
+        4. Create host and link this template
+        5. Configure macros with correct paths and host
+        
+        See SETUP.md for detailed instructions.
+      vendor:
+        name: Community
+        version: 1.0.0
+      groups:
+        - name: Templates/Virtualization
+      items:
+        - uuid: 5cf33d3c312d448ebaf14137d4e377e6
+          name: 'Incus: Get cluster info'
+          type: HTTP_AGENT
+          key: incus.api.cluster
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/cluster endpoint'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/cluster'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: bee3c053806a4a1d8416834686edbe63
+          name: 'Incus: Get cluster members'
+          type: HTTP_AGENT
+          key: incus.api.cluster.members
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/cluster/members with recursion'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/cluster/members'
+          query_fields:
+            - name: recursion
+              value: '1'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 960a24f7f49e4dc68c884449a4edf793
+          name: 'Incus: API health check'
+          type: HTTP_AGENT
+          key: incus.api.health
+          delay: '{$INCUS.HEALTH.INTERVAL}'
+          history: 7d
+          value_type: TEXT
+          description: 'Health check for Incus API connectivity'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.auth
+              error_handler: CUSTOM_VALUE
+              error_handler_params: error
+          timeout: 15s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: health
+          triggers:
+            - uuid: 7a5ca005f18e4b95a7f4640ce9b0f8ed
+              expression: 'last(/Incus Cluster by HTTP/incus.api.health)="error" and {$INCUS.MAINTENANCE}=0'
+              name: 'Incus: API authentication failed'
+              priority: HIGH
+              description: 'Incus API returned authentication error - check TLS certificates'
+              tags:
+                - tag: scope
+                  value: security
+            - uuid: 8a61278f399c4ebab17a5485665f8c0b
+              expression: 'nodata(/Incus Cluster by HTTP/incus.api.health,5m)=1 and {$INCUS.MAINTENANCE}=0'
+              name: 'Incus: API unreachable'
+              priority: DISASTER
+              description: 'Cannot connect to Incus API for 5 minutes'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: e578a6cac4524799a7742c4bca339871
+          name: 'Incus: Get images'
+          type: HTTP_AGENT
+          key: incus.api.images
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/images with recursion'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/images'
+          query_fields:
+            - name: recursion
+              value: '1'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 79debe3dd59e4904a2f760e902849703
+          name: 'Incus: Get instances'
+          type: HTTP_AGENT
+          key: incus.api.instances
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/instances with full recursion across all projects'
+          timeout: 60s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/instances'
+          query_fields:
+            - name: recursion
+              value: '2'
+            - name: all-projects
+              value: 'true'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: cd9faaf79130404eb2f980277a61ce8b
+          name: 'Incus: Get networks'
+          type: HTTP_AGENT
+          key: incus.api.networks
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/networks with recursion'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/networks'
+          query_fields:
+            - name: recursion
+              value: '1'
+            - name: all-projects
+              value: 'true'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 8233ba69bb454fb2a3c9584aa5ea2fbc
+          name: 'Incus: Get profiles'
+          type: HTTP_AGENT
+          key: incus.api.profiles
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/profiles with recursion'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/profiles'
+          query_fields:
+            - name: recursion
+              value: '1'
+            - name: all-projects
+              value: 'true'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: afca261ffd7e4d88a8639e34da32c1f5
+          name: 'Incus: Get projects'
+          type: HTTP_AGENT
+          key: incus.api.projects
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/projects with recursion'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/projects'
+          query_fields:
+            - name: recursion
+              value: '1'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 2e2feb72e86a4627a26eaab7ea442542
+          name: 'Incus: Get server resources'
+          type: HTTP_AGENT
+          key: incus.api.resources
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/resources (hardware info)'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/resources'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 62c43c46f8f74a009ef2500c5e620db3
+          name: 'Incus: Get server info'
+          type: HTTP_AGENT
+          key: incus.api.server
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0 endpoint'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 06b77a84fd33431caa87f737eecb6dfd
+          name: 'Incus: Get storage pools'
+          type: HTTP_AGENT
+          key: incus.api.storage_pools
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/storage-pools with recursion'
+          timeout: 60s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/storage-pools'
+          query_fields:
+            - name: recursion
+              value: '2'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 9b19b63966f3494083e12e148653efdc
+          name: 'Incus: Get warnings'
+          type: HTTP_AGENT
+          key: incus.api.warnings
+          delay: '{$INCUS.DATA.INTERVAL}'
+          history: '0'
+          value_type: TEXT
+          description: 'Raw JSON response from /1.0/warnings'
+          timeout: 30s
+          url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/warnings'
+          query_fields:
+            - name: recursion
+              value: '1'
+          ssl_cert_file: '{$INCUS.TLS.CERT}'
+          ssl_key_file: '{$INCUS.TLS.KEY}'
+          tags:
+            - tag: component
+              value: api
+            - tag: incus
+              value: raw
+        - uuid: 8f7a7e1d6f804647ba252f17fcd2f00f
+          name: 'Incus: Cluster enabled'
+          type: DEPENDENT
+          key: incus.cluster.enabled
+          history: 7d
+          description: 'Whether clustering is enabled (1=yes, 0=no)'
+          valuemap:
+            name: 'Incus Boolean'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.enabled
+            - type: BOOL_TO_DECIMAL
+          master_item:
+            key: incus.api.cluster
+          tags:
+            - tag: component
+              value: cluster
+            - tag: incus
+              value: info
+        - uuid: 0650cb4ee2bb4d47b3de0cfaa34195c3
+          name: 'Incus: Cluster member count'
+          type: DEPENDENT
+          key: incus.cluster.members.count
+          history: 7d
+          description: 'Total number of cluster members'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.length()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.cluster.members
+          tags:
+            - tag: component
+              value: cluster
+            - tag: incus
+              value: members
+        - uuid: 36ffa2471a204661acf656f4be37caf7
+          name: 'Incus: Cluster members online'
+          type: DEPENDENT
+          key: incus.cluster.members.online
+          history: 7d
+          description: 'Number of online cluster members'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.metadata[?(@.status=="Online")].length()'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.cluster.members
+          tags:
+            - tag: component
+              value: cluster
+            - tag: incus
+              value: members
+        - uuid: 553e6abc38dc4cb3ab19a254f23dba14
+          name: 'Incus: Total containers'
+          type: DEPENDENT
+          key: incus.containers.total
+          history: 7d
+          description: 'Total number of containers'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.metadata[?(@.type=="container")].length()'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.instances
+          tags:
+            - tag: component
+              value: instances
+            - tag: incus
+              value: count
+        - uuid: de0d2d132c4e4aeca72d2a610b81e3ea
+          name: 'Incus: Image count'
+          type: DEPENDENT
+          key: incus.images.count
+          history: 7d
+          description: 'Number of cached images'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.length()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.images
+          tags:
+            - tag: component
+              value: images
+            - tag: incus
+              value: count
+        - uuid: d856e171f7ee47a0abd307fddd34e8e1
+          name: 'Incus: Frozen instances'
+          type: DEPENDENT
+          key: incus.instances.frozen
+          history: 7d
+          description: 'Number of frozen instances'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.metadata[?(@.status=="Frozen")].length()'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.instances
+          tags:
+            - tag: component
+              value: instances
+            - tag: incus
+              value: count
+        - uuid: 00f7aff94b6b4a9f817238e34ca01050
+          name: 'Incus: Running instances'
+          type: DEPENDENT
+          key: incus.instances.running
+          history: 7d
+          description: 'Number of running instances'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.metadata[?(@.status=="Running")].length()'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.instances
+          tags:
+            - tag: component
+              value: instances
+            - tag: incus
+              value: count
+        - uuid: 0da76dd0fc154d87b928bc2554ec243a
+          name: 'Incus: Stopped instances'
+          type: DEPENDENT
+          key: incus.instances.stopped
+          history: 7d
+          description: 'Number of stopped instances'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.metadata[?(@.status=="Stopped")].length()'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.instances
+          tags:
+            - tag: component
+              value: instances
+            - tag: incus
+              value: count
+        - uuid: ba8e69f2396444ed809c247b66f20d93
+          name: 'Incus: Total instances'
+          type: DEPENDENT
+          key: incus.instances.total
+          history: 7d
+          description: 'Total number of instances across all projects'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.length()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.instances
+          tags:
+            - tag: component
+              value: instances
+            - tag: incus
+              value: count
+        - uuid: def926dc71714ddda6e393d128bf3d60
+          name: 'Incus: Network count'
+          type: DEPENDENT
+          key: incus.networks.count
+          history: 7d
+          description: 'Number of networks'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.length()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.networks
+          tags:
+            - tag: component
+              value: network
+            - tag: incus
+              value: count
+        - uuid: 900386f7173d4220a2ce6ba8449ee363
+          name: 'Incus: Storage pool count'
+          type: DEPENDENT
+          key: incus.pools.count
+          history: 7d
+          description: 'Number of storage pools'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.length()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.storage_pools
+          tags:
+            - tag: component
+              value: storage
+            - tag: incus
+              value: count
+        - uuid: 778ed9ab66474894bf407ce556924591
+          name: 'Incus: Project count'
+          type: DEPENDENT
+          key: incus.projects.count
+          history: 7d
+          description: 'Number of projects'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.length()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.projects
+          tags:
+            - tag: component
+              value: projects
+            - tag: incus
+              value: count
+        - uuid: 4ef2d77ea54a46a9b3ab1536d96e268a
+          name: 'Incus: API version'
+          type: DEPENDENT
+          key: incus.server.api_version
+          history: 7d
+          value_type: TEXT
+          description: 'Incus API version'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.api_version
+          master_item:
+            key: incus.api.server
+          tags:
+            - tag: component
+              value: server
+            - tag: incus
+              value: info
+        - uuid: c3e79bec232d4543b1f59c1039db097e
+          name: 'Incus: Server architecture'
+          type: DEPENDENT
+          key: incus.server.architecture
+          history: 7d
+          value_type: TEXT
+          description: 'Server CPU architecture'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.environment.kernel_architecture
+          master_item:
+            key: incus.api.server
+          tags:
+            - tag: component
+              value: server
+            - tag: incus
+              value: info
+        - uuid: 0589537c0c3241a88088bf6dca552a8e
+          name: 'Incus: Kernel version'
+          type: DEPENDENT
+          key: incus.server.kernel
+          history: 7d
+          value_type: TEXT
+          description: 'Host kernel version'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.environment.kernel_version
+          master_item:
+            key: incus.api.server
+          tags:
+            - tag: component
+              value: server
+            - tag: incus
+              value: info
+        - uuid: f784a22f494142adb94c73f832a54537
+          name: 'Incus: Server name'
+          type: DEPENDENT
+          key: incus.server.name
+          history: 7d
+          value_type: TEXT
+          description: 'Incus server hostname'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.environment.server_name
+          master_item:
+            key: incus.api.server
+          tags:
+            - tag: component
+              value: server
+            - tag: incus
+              value: info
+        - uuid: 1d7723e47af640c69234c8f043572c89
+          name: 'Incus: OS name'
+          type: DEPENDENT
+          key: incus.server.os
+          history: 7d
+          value_type: TEXT
+          description: 'Host operating system'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.environment.os_name
+          master_item:
+            key: incus.api.server
+          tags:
+            - tag: component
+              value: server
+            - tag: incus
+              value: info
+        - uuid: 84310b8dc39346edbd9624eda2f314c7
+          name: 'Incus: Server version'
+          type: DEPENDENT
+          key: incus.server.version
+          history: 7d
+          value_type: TEXT
+          description: 'Incus server version'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata.environment.server_version
+          master_item:
+            key: incus.api.server
+          tags:
+            - tag: component
+              value: server
+            - tag: incus
+              value: info
+          triggers:
+            - uuid: 92eef8b3203f4acd811cbc68b2375d80
+              expression: 'change(/Incus Cluster by HTTP/incus.server.version)<>0'
+              name: 'Incus: Server version changed to {ITEM.LASTVALUE}'
+              priority: INFO
+              description: 'Incus server was upgraded'
+              manual_close: 'YES'
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: 5e65ed42246a4b6fb18a19bae5d8cd19
+          name: 'Incus: Total VMs'
+          type: DEPENDENT
+          key: incus.vms.total
+          history: 7d
+          description: 'Total number of virtual machines'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.metadata[?(@.type=="virtual-machine")].length()'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: incus.api.instances
+          tags:
+            - tag: component
+              value: instances
+            - tag: incus
+              value: count
+        - uuid: f3996b92b161492791c0e0b876666735
+          name: 'Incus: Warning count'
+          type: DEPENDENT
+          key: incus.warnings.count
+          history: 7d
+          description: 'Number of active warnings (excludes acknowledged)'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var data = JSON.parse(value);
+                  var warnings = data.metadata || [];
+                  var active = warnings.filter(function(w) {
+                    return w.status === "new";
+                  });
+                  return active.length;
+          master_item:
+            key: incus.api.warnings
+          tags:
+            - tag: component
+              value: warnings
+            - tag: incus
+              value: count
+          triggers:
+            - uuid: 226e99bdf57b4310b92433d22cde28b7
+              expression: 'last(/Incus Cluster by HTTP/incus.warnings.count)>0 and {$INCUS.MAINTENANCE}=0'
+              name: 'Incus: Cluster has active warnings ({ITEM.LASTVALUE})'
+              priority: WARNING
+              description: 'Incus cluster has active warnings that may require attention'
+              tags:
+                - tag: scope
+                  value: notice
+      discovery_rules:
+        - uuid: c6e6de2a20da4a8985d11bd29b38b18d
+          name: 'Incus: Cluster members discovery'
+          type: DEPENDENT
+          key: incus.discovery.cluster.members
+          description: 'Discovers all cluster members'
+          item_prototypes:
+            - uuid: 3c81992547154d3488c3d56c2e3be540
+              name: 'Incus: Member [{#MEMBER.NAME}] goroutines'
+              type: DEPENDENT
+              key: 'incus.daemon.goroutines[{#MEMBER.NAME}]'
+              history: 7d
+              description: 'Number of Go goroutines'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - incus_go_goroutines
+                    - value
+                    - ''
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.metrics.raw[{#MEMBER.NAME}]'
+              tags:
+                - tag: component
+                  value: daemon
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+            - uuid: ab2f33dff4a7445981eaaea0eb6c5707
+              name: 'Incus: Member [{#MEMBER.NAME}] heap memory'
+              type: DEPENDENT
+              key: 'incus.daemon.heap[{#MEMBER.NAME}]'
+              history: 7d
+              units: B
+              description: 'Go heap memory in use'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - incus_go_memstats_heap_inuse_bytes
+                    - value
+                    - ''
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.metrics.raw[{#MEMBER.NAME}]'
+              tags:
+                - tag: component
+                  value: daemon
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+            - uuid: a147c82d90ca4252916b95eb8180ba64
+              name: 'Incus: Member [{#MEMBER.NAME}] active operations'
+              type: DEPENDENT
+              key: 'incus.daemon.operations[{#MEMBER.NAME}]'
+              history: 7d
+              description: 'Number of active operations'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - incus_operations_total
+                    - value
+                    - ''
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.metrics.raw[{#MEMBER.NAME}]'
+              tags:
+                - tag: component
+                  value: daemon
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+            - uuid: 66e268fad25d4e4583287d8e09226829
+              name: 'Incus: Member [{#MEMBER.NAME}] daemon uptime'
+              type: DEPENDENT
+              key: 'incus.daemon.uptime[{#MEMBER.NAME}]'
+              history: 7d
+              value_type: FLOAT
+              units: uptime
+              description: 'Incus daemon uptime in seconds'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - incus_uptime_seconds
+                    - value
+                    - ''
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.metrics.raw[{#MEMBER.NAME}]'
+              tags:
+                - tag: component
+                  value: daemon
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+              trigger_prototypes:
+                - uuid: aa068df7c0854a06b267cd9497bac524
+                  expression: 'change(/Incus Cluster by HTTP/incus.daemon.uptime[{#MEMBER.NAME}])<0 and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Member [{#MEMBER.NAME}] daemon restarted'
+                  priority: INFO
+                  description: 'Incus daemon was restarted on this member'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: member
+                      value: '{#MEMBER.NAME}'
+                    - tag: scope
+                      value: notice
+            - uuid: 5e3c0104da0b4a3ba4fcdead9c91366b
+              name: 'Incus: Member [{#MEMBER.NAME}] architecture'
+              type: DEPENDENT
+              key: 'incus.member.architecture[{#MEMBER.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Cluster member CPU architecture'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.server_name=="{#MEMBER.NAME}")].architecture.first()'
+              master_item:
+                key: incus.api.cluster.members
+              tags:
+                - tag: component
+                  value: cluster
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+            - uuid: fd7b663439f848229cdf062f401f3f65
+              name: 'Incus: Member [{#MEMBER.NAME}] is database member'
+              type: DEPENDENT
+              key: 'incus.member.database[{#MEMBER.NAME}]'
+              history: 7d
+              description: 'Whether this member is part of the database cluster'
+              valuemap:
+                name: 'Incus Boolean'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.server_name=="{#MEMBER.NAME}")].database.first()'
+                - type: BOOL_TO_DECIMAL
+              master_item:
+                key: incus.api.cluster.members
+              tags:
+                - tag: component
+                  value: cluster
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+            - uuid: 5569c9b2f97d4f139dc09f6261827fde
+              name: 'Incus: Member [{#MEMBER.NAME}] message'
+              type: DEPENDENT
+              key: 'incus.member.message[{#MEMBER.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Cluster member status message'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.server_name=="{#MEMBER.NAME}")].message.first()'
+                  error_handler: CUSTOM_VALUE
+              master_item:
+                key: incus.api.cluster.members
+              tags:
+                - tag: component
+                  value: cluster
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+            - uuid: 4dcb21815a884f89b57b24af3983eafd
+              name: 'Incus: Member [{#MEMBER.NAME}] roles'
+              type: DEPENDENT
+              key: 'incus.member.roles[{#MEMBER.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Cluster member roles'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.server_name=="{#MEMBER.NAME}")].roles.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return JSON.stringify(JSON.parse(value));'
+              master_item:
+                key: incus.api.cluster.members
+              tags:
+                - tag: component
+                  value: cluster
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+            - uuid: 03779917e2994ee2b6a18622b25f753a
+              name: 'Incus: Member [{#MEMBER.NAME}] status'
+              type: DEPENDENT
+              key: 'incus.member.status[{#MEMBER.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Cluster member status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.server_name=="{#MEMBER.NAME}")].status.first()'
+              master_item:
+                key: incus.api.cluster.members
+              tags:
+                - tag: component
+                  value: cluster
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+              trigger_prototypes:
+                - uuid: 815a27198fb64f27874767ff9a5f23c2
+                  expression: 'last(/Incus Cluster by HTTP/incus.member.status[{#MEMBER.NAME}])="Blocked" and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Member [{#MEMBER.NAME}] is blocked'
+                  priority: AVERAGE
+                  description: 'Cluster member is blocked'
+                  tags:
+                    - tag: member
+                      value: '{#MEMBER.NAME}'
+                    - tag: scope
+                      value: availability
+                - uuid: 81ffe9909da9480ba2cb5781ce067e38
+                  expression: 'last(/Incus Cluster by HTTP/incus.member.status[{#MEMBER.NAME}])="Evacuated" and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Member [{#MEMBER.NAME}] is evacuated'
+                  priority: WARNING
+                  description: 'Cluster member has been evacuated'
+                  tags:
+                    - tag: member
+                      value: '{#MEMBER.NAME}'
+                    - tag: scope
+                      value: notice
+                - uuid: acba98fe2f1546b997ec73751511f63f
+                  expression: 'last(/Incus Cluster by HTTP/incus.member.status[{#MEMBER.NAME}])="Offline" and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Member [{#MEMBER.NAME}] is offline'
+                  priority: HIGH
+                  description: 'Cluster member is not reachable'
+                  tags:
+                    - tag: member
+                      value: '{#MEMBER.NAME}'
+                    - tag: scope
+                      value: availability
+            - uuid: 81ce8cb0c59f4cb6aebf13015c8c9bcc
+              name: 'Incus: Member [{#MEMBER.NAME}] Prometheus metrics'
+              type: HTTP_AGENT
+              key: 'incus.metrics.raw[{#MEMBER.NAME}]'
+              delay: '{$INCUS.METRICS.INTERVAL}'
+              history: '0'
+              value_type: TEXT
+              description: 'Raw Prometheus metrics from this cluster member'
+              timeout: 30s
+              url: '{$INCUS.API.SCHEME}://{#MEMBER.ADDRESS}:{$INCUS.API.PORT}/1.0/metrics'
+              ssl_cert_file: '{$INCUS.TLS.CERT}'
+              ssl_key_file: '{$INCUS.TLS.KEY}'
+              tags:
+                - tag: component
+                  value: metrics
+                - tag: member
+                  value: '{#MEMBER.NAME}'
+          graph_prototypes:
+            - uuid: 82bfa43c521c44098b25a7e86520c254
+              name: 'Incus: Member [{#MEMBER.NAME}] daemon health'
+              graph_items:
+                - color: 1A7C11
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.daemon.goroutines[{#MEMBER.NAME}]'
+                - color: 2774A4
+                  yaxisside: RIGHT
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.daemon.heap[{#MEMBER.NAME}]'
+          master_item:
+            key: incus.api.cluster.members
+          lld_macro_paths:
+            - lld_macro: '{#MEMBER.ADDRESS}'
+              path: $.address
+            - lld_macro: '{#MEMBER.NAME}'
+              path: $.server_name
+            - lld_macro: '{#MEMBER.STATUS}'
+              path: $.status
+            - lld_macro: '{#MEMBER.URL}'
+              path: $.url
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var data = JSON.parse(value);
+                  var result = [];
+                  for (var i = 0; i < data.length; i++) {
+                    var member = data[i];
+                    // Extract address from URL (remove https:// and port)
+                    var url = member.url  || '';
+                    var address = url.replace(/^https?:\/\//, '').replace(/:\d+$/, '');
+                    result.push({
+                      "server_name": member.server_name,
+                      "url": member.url,
+                      "address": address,
+                       "status": member.status
+                    });
+                  }
+                  return JSON.stringify(result);
+        - uuid: 9e30ba385416418eb319ff24f4ab7de7
+          name: 'Incus: Images discovery'
+          type: DEPENDENT
+          key: incus.discovery.images
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#IMAGE.FINGERPRINT}'
+                value: '{$INCUS.IMAGE.IGNORE}'
+                operator: NOT_MATCHES_REGEX
+          description: 'Discovers all cached images'
+          item_prototypes:
+            - uuid: 06b86fa835614d99bf7473978c7354c2
+              name: 'Incus: Image [{#IMAGE.ALIAS}] auto-update'
+              type: DEPENDENT
+              key: 'incus.image.auto_update[{#IMAGE.FINGERPRINT.SHORT}]'
+              history: 7d
+              description: 'Whether the image has auto-update enabled'
+              valuemap:
+                name: 'Incus Boolean'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.fingerprint=~"^{#IMAGE.FINGERPRINT.SHORT}")].auto_update.first()'
+                - type: BOOL_TO_DECIMAL
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.images
+              tags:
+                - tag: component
+                  value: image
+                - tag: image
+                  value: '{#IMAGE.FINGERPRINT.SHORT}'
+            - uuid: 4e7310d771104d99bf249f6a503a946a
+              name: 'Incus: Image [{#IMAGE.ALIAS}] cached'
+              type: DEPENDENT
+              key: 'incus.image.cached[{#IMAGE.FINGERPRINT.SHORT}]'
+              history: 7d
+              description: 'Whether the image is cached (1=yes, 0=no)'
+              valuemap:
+                name: 'Incus Boolean'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.fingerprint=~"^{#IMAGE.FINGERPRINT.SHORT}")].cached.first()'
+                - type: BOOL_TO_DECIMAL
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.images
+              tags:
+                - tag: component
+                  value: image
+                - tag: image
+                  value: '{#IMAGE.FINGERPRINT.SHORT}'
+            - uuid: 02257edfaaa442f29c01f3efd434048f
+              name: 'Incus: Image [{#IMAGE.ALIAS}] size'
+              type: DEPENDENT
+              key: 'incus.image.size[{#IMAGE.FINGERPRINT.SHORT}]'
+              history: 7d
+              units: B
+              description: 'Image size in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.fingerprint=~"^{#IMAGE.FINGERPRINT.SHORT}")].size.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.images
+              tags:
+                - tag: component
+                  value: image
+                - tag: image
+                  value: '{#IMAGE.FINGERPRINT.SHORT}'
+          master_item:
+            key: incus.api.images
+          lld_macro_paths:
+            - lld_macro: '{#IMAGE.ALIAS}'
+              path: $.alias
+            - lld_macro: '{#IMAGE.FINGERPRINT.SHORT}'
+              path: $.fingerprint_short
+            - lld_macro: '{#IMAGE.FINGERPRINT}'
+              path: $.fingerprint
+            - lld_macro: '{#IMAGE.TYPE}'
+              path: $.type
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var images = JSON.parse(value);
+                  var result = [];
+                  for (var i = 0; i < images.length; i++) {
+                    var img = images[i];
+                    var alias = "";
+                    if (img.aliases && img.aliases.length > 0) {
+                       alias = img.aliases[0].name;
+                    } else {
+                      alias = img.fingerprint.substring(0, 12);
+                    }
+                    result.push({
+                      "fingerprint": img.fingerprint,
+                      "fingerprint_short": img.fingerprint.substring(0,  12),
+                      "alias": alias,
+                      "type": img.type || "container"
+                    });
+                  }
+                  return JSON.stringify(result);
+        - uuid: e1205b17a6dc43c7b5837ce622cc2267
+          name: 'Incus: Instance network interfaces discovery'
+          type: DEPENDENT
+          key: incus.discovery.instance.networks
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#IF.NAME}'
+                value: '{$INCUS.INTERFACE.IGNORE}'
+                operator: NOT_MATCHES_REGEX
+          description: 'Discovers network interfaces for each instance'
+          item_prototypes:
+            - uuid: f70bfacded2d46b68f5d8d048cf64f8d
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} bytes received'
+              type: DEPENDENT
+              key: 'incus.instance.net.rx.bytes[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              units: B
+              description: 'Bytes received on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.bytes_received'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: 79498941cda84078a43b760d04c825b4
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} drops received'
+              type: DEPENDENT
+              key: 'incus.instance.net.rx.dropped[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              description: 'Receive drops on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.packets_dropped_inbound'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: 875a10222dfa461bb90f48f7a45c1788
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} errors received'
+              type: DEPENDENT
+              key: 'incus.instance.net.rx.errors[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              description: 'Receive errors on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.errors_received'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: bd4e5b858fa24c77bc4a916db4e14bf4
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} packets received'
+              type: DEPENDENT
+              key: 'incus.instance.net.rx.packets[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              description: 'Packets received on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.packets_received'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: bd666a763880401b926b92fb9bd43a39
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] network state raw'
+              type: HTTP_AGENT
+              key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              delay: '{$INCUS.STATE.INTERVAL}'
+              history: '0'
+              value_type: TEXT
+              description: 'Raw JSON state data for this instance (for network metrics)'
+              timeout: 30s
+              url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/instances/{#INSTANCE.NAME}/state'
+              query_fields:
+                - name: project
+                  value: '{#INSTANCE.PROJECT}'
+              ssl_cert_file: '{$INCUS.TLS.CERT}'
+              ssl_key_file: '{$INCUS.TLS.KEY}'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: 363dbaab791148e8ac43f8f5bdd4d45b
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} bytes sent'
+              type: DEPENDENT
+              key: 'incus.instance.net.tx.bytes[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              units: B
+              description: 'Bytes sent on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.bytes_sent'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: 784c14bbfb6748fdb1cad1d152b47b1b
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} drops sent'
+              type: DEPENDENT
+              key: 'incus.instance.net.tx.dropped[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              description: 'Send drops on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.packets_dropped_outbound'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: 177f27353c854c94b5aada48c83b5e63
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} errors sent'
+              type: DEPENDENT
+              key: 'incus.instance.net.tx.errors[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              description: 'Send errors on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.errors_sent'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+            - uuid: 4171c399bec34d08b60f1ce656f7157d
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} packets sent'
+              type: DEPENDENT
+              key: 'incus.instance.net.tx.packets[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              history: 7d
+              description: 'Packets sent on this interface'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata.network["{#IF.NAME}"].counters.packets_sent'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.net.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+              tags:
+                - tag: component
+                  value: network
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+          trigger_prototypes:
+            - uuid: ae9b12dc26b54067b574a00d887d8192
+              expression: 'min(/Incus Cluster by HTTP/incus.instance.net.rx.errors[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}],5m)>0 or min(/Incus Cluster by HTTP/incus.instance.net.tx.errors[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}],5m)>0 and {$INCUS.MAINTENANCE}=0'
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} has errors'
+              priority: WARNING
+              description: 'Network errors detected on this interface'
+              tags:
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: interface
+                  value: '{#IF.NAME}'
+                - tag: scope
+                  value: performance
+          graph_prototypes:
+            - uuid: 0aa7d773aa8148fe9ffd990e95b81fec
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] interface {#IF.NAME} traffic'
+              graph_items:
+                - color: 1A7C11
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.instance.net.rx.bytes[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+                - color: 2774A4
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.instance.net.tx.bytes[{#INSTANCE.PROJECT},{#INSTANCE.NAME},{#IF.NAME}]'
+          master_item:
+            key: incus.api.instances
+          lld_macro_paths:
+            - lld_macro: '{#IF.NAME}'
+              path: $.if_name
+            - lld_macro: '{#IF.STATE}'
+              path: $.if_state
+            - lld_macro: '{#IF.TYPE}'
+              path: $.if_type
+            - lld_macro: '{#INSTANCE.NAME}'
+              path: $.instance_name
+            - lld_macro: '{#INSTANCE.PROJECT}'
+              path: $.instance_project
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var instances = JSON.parse(value);
+                  var result = [];
+                  for (var i = 0; i < instances.length; i++) {
+                    var inst = instances[i];
+                    if (inst.state && inst.state.network) {
+                      var networks = inst.state.network;
+                       for (var ifname in networks) {
+                        if (networks.hasOwnProperty(ifname)) {
+                          result.push({
+                            "instance_name": inst.name,
+                            "instance_project": inst.project,
+                             "if_name": ifname,
+                            "if_type": networks[ifname].type || "",
+                            "if_state": networks[ifname].state || ""
+                          });
+                        }
+                      }
+                    }
+                  }
+                  return JSON.stringify(result);
+        - uuid: 5ff0f4a2298440c0bcf83b1c64958a9a
+          name: 'Incus: Instances discovery'
+          type: DEPENDENT
+          key: incus.discovery.instances
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#INSTANCE.NAME}'
+                value: '{$INCUS.INSTANCE.IGNORE}'
+                operator: NOT_MATCHES_REGEX
+          description: 'Discovers all instances (containers and VMs) across all projects'
+          item_prototypes:
+            - uuid: 74557726afcf4a7f903bc008c0662d59
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] CPU usage'
+              type: DEPENDENT
+              key: 'incus.instance.cpu[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              units: ns
+              description: 'CPU time consumed in nanoseconds'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.cpu.usage
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: 36d22228546e4c2da4953cfec1348620
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] disk root % used'
+              type: CALCULATED
+              key: 'incus.instance.disk.root.pused[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              delay: '{$INCUS.STATE.INTERVAL}'
+              history: 7d
+              value_type: FLOAT
+              units: '%'
+              params: 'min(100*last(//incus.instance.disk.root.usage[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])/(last(//incus.instance.disk.root.total[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])+1), 100)'
+              description: 'Root disk usage percentage (capped at 100%, shows 100% for containers without disk limits)'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: 05ebd24421a54a3b9f4faa6d07fee285
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] disk root total'
+              type: DEPENDENT
+              key: 'incus.instance.disk.root.total[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              units: B
+              description: 'Root disk total size in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.disk.root.total
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: 8ec74d4f89a2463c88e9a0958de2eeb2
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] disk root usage'
+              type: DEPENDENT
+              key: 'incus.instance.disk.root.usage[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              units: B
+              description: 'Root disk usage in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.disk.root.usage
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: e6795e35392144d68065caf065e40f0a
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] location'
+              type: DEPENDENT
+              key: 'incus.instance.location[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Cluster member where this instance is running'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#INSTANCE.NAME}" && @.project=="{#INSTANCE.PROJECT}")].location.first()'
+                  error_handler: CUSTOM_VALUE
+              master_item:
+                key: incus.api.instances
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+              trigger_prototypes:
+                - uuid: c3f7f54ef16e43ed8d2bc123ba634e1b
+                  expression: 'change(/Incus Cluster by HTTP/incus.instance.location[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])<>0 and length(last(/Incus Cluster by HTTP/incus.instance.location[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]))>0 and {$INCUS.INSTANCE.TRACK_CHANGES}=1'
+                  name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] migrated to {ITEM.LASTVALUE}'
+                  priority: INFO
+                  description: 'Instance has been migrated to a different cluster member'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: instance
+                      value: '{#INSTANCE.NAME}'
+                    - tag: project
+                      value: '{#INSTANCE.PROJECT}'
+                    - tag: scope
+                      value: notice
+            - uuid: a49708a002bc4173b6f2cea88d6302f5
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] memory peak'
+              type: DEPENDENT
+              key: 'incus.instance.memory.peak[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              units: B
+              description: 'Peak memory usage in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.memory.usage_peak
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: 481d89620056420fa2a7cc33ad864b92
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] memory usage'
+              type: DEPENDENT
+              key: 'incus.instance.memory.usage[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              units: B
+              description: 'Memory usage in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.memory.usage
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: 1da8b2aaa7d34cf4a3f9d91aab3ce948
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] PID'
+              type: DEPENDENT
+              key: 'incus.instance.pid[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              trends: '0'
+              description: 'Instance init process PID'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.pid
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: 20d1f3f2c0924ecf8ed0981ba69d91ea
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] processes'
+              type: DEPENDENT
+              key: 'incus.instance.processes[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              description: 'Number of running processes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.processes
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: 921550344c494e3e965fbf8b0a73912b
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] last snapshot age'
+              type: DEPENDENT
+              key: 'incus.instance.snapshot.age[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              units: s
+              description: 'Age of the most recent snapshot in seconds'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#INSTANCE.NAME}" && @.project=="{#INSTANCE.PROJECT}")].snapshots.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var snapshots = JSON.parse(value);
+                      if (!snapshots || snapshots.length === 0) return 0;
+                      var newest = 0;
+                      var now = Date.now();
+                      for (var i = 0; i < snapshots.length; i++) {
+                        var ts = new  Date(snapshots[i].created_at).getTime();
+                        if (ts > newest) newest = ts;
+                      }
+                      return newest > 0 ? Math.floor((now - newest) / 1000) : 0;
+              master_item:
+                key: incus.api.instances
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: a577db43d2ea410aac33f14be21de605
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] snapshot count'
+              type: DEPENDENT
+              key: 'incus.instance.snapshots[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              description: 'Number of snapshots'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#INSTANCE.NAME}" && @.project=="{#INSTANCE.PROJECT}")].snapshots.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var snapshots = JSON.parse(value);
+                      return snapshots ? snapshots.length : 0;
+              master_item:
+                key: incus.api.instances
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: b0210e5f02d241c1b447593bc7347231
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] state raw'
+              type: HTTP_AGENT
+              key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              delay: '{$INCUS.STATE.INTERVAL}'
+              history: '0'
+              value_type: TEXT
+              description: 'Raw JSON state data for this instance'
+              timeout: 30s
+              url: '{$INCUS.API.SCHEME}://{$INCUS.API.HOST}:{$INCUS.API.PORT}/1.0/instances/{#INSTANCE.NAME}/state'
+              query_fields:
+                - name: project
+                  value: '{#INSTANCE.PROJECT}'
+              ssl_cert_file: '{$INCUS.TLS.CERT}'
+              ssl_key_file: '{$INCUS.TLS.KEY}'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: ee8d1d98313e4277897459866d748fb0
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] status'
+              type: DEPENDENT
+              key: 'incus.instance.status[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Instance status (Running, Stopped, Frozen, etc.)'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.status
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: Unknown
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+              trigger_prototypes:
+                - uuid: 95bb5f314bf4429382c48b43333c9830
+                  expression: 'last(/Incus Cluster by HTTP/incus.instance.status[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])="Frozen" and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] is frozen'
+                  priority: INFO
+                  description: 'Instance is frozen'
+                  tags:
+                    - tag: instance
+                      value: '{#INSTANCE.NAME}'
+                    - tag: project
+                      value: '{#INSTANCE.PROJECT}'
+                    - tag: scope
+                      value: notice
+                - uuid: c5a2810f32444cb78ebc4e3d487c123a
+                  expression: 'last(/Incus Cluster by HTTP/incus.instance.status[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])="Error" and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] is in error state'
+                  priority: HIGH
+                  description: 'Instance is in error state'
+                  tags:
+                    - tag: instance
+                      value: '{#INSTANCE.NAME}'
+                    - tag: project
+                      value: '{#INSTANCE.PROJECT}'
+                    - tag: scope
+                      value: availability
+                - uuid: b8d106e37407467ba4f8989774bbd576
+                  expression: 'change(/Incus Cluster by HTTP/incus.instance.status[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])<>0 and {$INCUS.INSTANCE.TRACK_CHANGES}=1'
+                  name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] state changed to {ITEM.LASTVALUE}'
+                  priority: INFO
+                  description: 'Instance state has changed'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: instance
+                      value: '{#INSTANCE.NAME}'
+                    - tag: project
+                      value: '{#INSTANCE.PROJECT}'
+                    - tag: scope
+                      value: notice
+            - uuid: 8da4d4b6dab540d7b43b5c2005b53d0e
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] status code'
+              type: DEPENDENT
+              key: 'incus.instance.status_code[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              description: 'Instance status code'
+              valuemap:
+                name: 'Incus Instance Status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.status_code
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: e0ee54f4f66642e9b180eaaff046a487
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] swap usage'
+              type: DEPENDENT
+              key: 'incus.instance.swap.usage[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              units: B
+              description: 'Swap usage in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.metadata.memory.swap_usage
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'incus.instance.state.raw[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+            - uuid: b9ef5ede6bf54c5ba6009be877728bed
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] type'
+              type: DEPENDENT
+              key: 'incus.instance.type[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Instance type (container or virtual-machine)'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#INSTANCE.NAME}" && @.project=="{#INSTANCE.PROJECT}")].type.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: unknown
+              master_item:
+                key: incus.api.instances
+              tags:
+                - tag: component
+                  value: instance
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+          trigger_prototypes:
+            - uuid: c882b7e1d8ea44e8822878a3d716d7a8
+              expression: 'last(/Incus Cluster by HTTP/incus.instance.snapshot.age[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])>{$INCUS.SNAPSHOT.MAXAGE} and last(/Incus Cluster by HTTP/incus.instance.snapshots[{#INSTANCE.PROJECT},{#INSTANCE.NAME}])>0 and {$INCUS.MAINTENANCE}=0'
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] snapshot too old'
+              priority: WARNING
+              description: 'The most recent snapshot is older than the configured threshold'
+              tags:
+                - tag: instance
+                  value: '{#INSTANCE.NAME}'
+                - tag: project
+                  value: '{#INSTANCE.PROJECT}'
+                - tag: scope
+                  value: notice
+          graph_prototypes:
+            - uuid: f607607fb7314aaa9257ffa3a9af8e6d
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] memory'
+              graph_items:
+                - color: 1A7C11
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.instance.memory.usage[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+                - color: F63100
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.instance.memory.peak[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+            - uuid: c58625e7492f47d28286543f3c7d58cf
+              name: 'Incus: Instance [{#INSTANCE.PROJECT}/{#INSTANCE.NAME}] processes'
+              graph_items:
+                - color: 1A7C11
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.instance.processes[{#INSTANCE.PROJECT},{#INSTANCE.NAME}]'
+          master_item:
+            key: incus.api.instances
+          lld_macro_paths:
+            - lld_macro: '{#INSTANCE.ARCHITECTURE}'
+              path: $.architecture
+            - lld_macro: '{#INSTANCE.LOCATION}'
+              path: $.location
+            - lld_macro: '{#INSTANCE.NAME}'
+              path: $.name
+            - lld_macro: '{#INSTANCE.PROJECT}'
+              path: $.project
+            - lld_macro: '{#INSTANCE.STATUS}'
+              path: $.status
+            - lld_macro: '{#INSTANCE.TYPE}'
+              path: $.type
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+        - uuid: c1d1245343394f1cbf0d2bc75cb435f3
+          name: 'Incus: Networks discovery'
+          type: DEPENDENT
+          key: incus.discovery.networks
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#NETWORK.MANAGED}'
+                value: 'true'
+              - macro: '{#NETWORK.NAME}'
+                value: '{$INCUS.NETWORK.IGNORE}'
+                operator: NOT_MATCHES_REGEX
+          description: 'Discovers all managed networks'
+          item_prototypes:
+            - uuid: b4ce050c8849418d83ae67aaeaa02f30
+              name: 'Incus: Network [{#NETWORK.NAME}] status'
+              type: DEPENDENT
+              key: 'incus.network.status[{#NETWORK.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Network status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#NETWORK.NAME}")].status.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: Unknown
+              master_item:
+                key: incus.api.networks
+              tags:
+                - tag: component
+                  value: network
+                - tag: network
+                  value: '{#NETWORK.NAME}'
+              trigger_prototypes:
+                - uuid: 696c3c8d74d44a04878eedb08fc88fd7
+                  expression: 'last(/Incus Cluster by HTTP/incus.network.status[{#NETWORK.NAME}])<>"Created" and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Network [{#NETWORK.NAME}] unavailable'
+                  priority: HIGH
+                  description: 'Network is not in Created status'
+                  tags:
+                    - tag: network
+                      value: '{#NETWORK.NAME}'
+                    - tag: scope
+                      value: availability
+            - uuid: 9245a4603954486083f17fe36b180c84
+              name: 'Incus: Network [{#NETWORK.NAME}] type'
+              type: DEPENDENT
+              key: 'incus.network.type[{#NETWORK.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Network type (bridge, ovn, macvlan, etc.)'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#NETWORK.NAME}")].type.first()'
+              master_item:
+                key: incus.api.networks
+              tags:
+                - tag: component
+                  value: network
+                - tag: network
+                  value: '{#NETWORK.NAME}'
+            - uuid: 67ea9b60997146d58905b41eede89efe
+              name: 'Incus: Network [{#NETWORK.NAME}] used by count'
+              type: DEPENDENT
+              key: 'incus.network.used_by[{#NETWORK.NAME}]'
+              history: 7d
+              description: 'Number of instances using this network'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#NETWORK.NAME}")].used_by.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var used = JSON.parse(value);
+                      return used ? used.length : 0;
+              master_item:
+                key: incus.api.networks
+              tags:
+                - tag: component
+                  value: network
+                - tag: network
+                  value: '{#NETWORK.NAME}'
+          master_item:
+            key: incus.api.networks
+          lld_macro_paths:
+            - lld_macro: '{#NETWORK.MANAGED}'
+              path: $.managed
+            - lld_macro: '{#NETWORK.NAME}'
+              path: $.name
+            - lld_macro: '{#NETWORK.STATUS}'
+              path: $.status
+            - lld_macro: '{#NETWORK.TYPE}'
+              path: $.type
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var networks = JSON.parse(value);
+                  var result = [];
+                  for (var i = 0; i < networks.length; i++) {
+                    var net = networks[i];
+                    result.push({
+                      "name": net.name,
+                      "type": net.type ||  "",
+                      "managed": net.managed ? "true" : "false",
+                      "status": net.status || ""
+                    });
+                  }
+                  return JSON.stringify(result);
+        - uuid: b4205ec9b30c448890d5c89a948d4c55
+          name: 'Incus: Profiles discovery'
+          type: DEPENDENT
+          key: incus.discovery.profiles
+          description: 'Discovers all profiles'
+          item_prototypes:
+            - uuid: 80b177d2835c4a08a0ab24763a51db52
+              name: 'Incus: Profile [{#PROFILE.PROJECT}/{#PROFILE.NAME}] used by count'
+              type: DEPENDENT
+              key: 'incus.profile.used_by[{#PROFILE.PROJECT},{#PROFILE.NAME}]'
+              history: 7d
+              description: 'Number of instances using this profile'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#PROFILE.NAME}")].used_by.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var used = JSON.parse(value);
+                      return used ? used.length : 0;
+              master_item:
+                key: incus.api.profiles
+              tags:
+                - tag: component
+                  value: profile
+                - tag: profile
+                  value: '{#PROFILE.NAME}'
+                - tag: project
+                  value: '{#PROFILE.PROJECT}'
+          master_item:
+            key: incus.api.profiles
+          lld_macro_paths:
+            - lld_macro: '{#PROFILE.DESCRIPTION}'
+              path: $.description
+            - lld_macro: '{#PROFILE.NAME}'
+              path: $.name
+            - lld_macro: '{#PROFILE.PROJECT}'
+              path: $.project
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var profiles = JSON.parse(value);
+                  var result = [];
+                  for (var i = 0; i < profiles.length; i++) {
+                    var p = profiles[i];
+                    result.push({
+                      "name": p.name,
+                      "project": p.project ||  "default",
+                      "description": p.description || ""
+                    });
+                  }
+                  return JSON.stringify(result);
+        - uuid: 85d1647ec8304bf19fc882f638fa618c
+          name: 'Incus: Projects discovery'
+          type: DEPENDENT
+          key: incus.discovery.projects
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#PROJECT.NAME}'
+                value: '{$INCUS.PROJECT.IGNORE}'
+                operator: NOT_MATCHES_REGEX
+          description: 'Discovers all projects'
+          item_prototypes:
+            - uuid: 9bf1155513e84dccaaa375494e7bfdf3
+              name: 'Incus: Project [{#PROJECT.NAME}] container count'
+              type: DEPENDENT
+              key: 'incus.project.containers[{#PROJECT.NAME}]'
+              history: 7d
+              description: 'Number of containers in this project'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.project=="{#PROJECT.NAME}" && @.type=="container")].length()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.instances
+              tags:
+                - tag: component
+                  value: project
+                - tag: project
+                  value: '{#PROJECT.NAME}'
+            - uuid: 96668962d2854b659487332d54ba2cd1
+              name: 'Incus: Project [{#PROJECT.NAME}] instance count'
+              type: DEPENDENT
+              key: 'incus.project.instances[{#PROJECT.NAME}]'
+              history: 7d
+              description: 'Number of instances in this project'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.project=="{#PROJECT.NAME}")].length()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.instances
+              tags:
+                - tag: component
+                  value: project
+                - tag: project
+                  value: '{#PROJECT.NAME}'
+            - uuid: ae986bc26af64f4d9f98ded4a49f09b5
+              name: 'Incus: Project [{#PROJECT.NAME}] VM count'
+              type: DEPENDENT
+              key: 'incus.project.vms[{#PROJECT.NAME}]'
+              history: 7d
+              description: 'Number of VMs in this project'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.project=="{#PROJECT.NAME}" && @.type=="virtual-machine")].length()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.instances
+              tags:
+                - tag: component
+                  value: project
+                - tag: project
+                  value: '{#PROJECT.NAME}'
+          master_item:
+            key: incus.api.projects
+          lld_macro_paths:
+            - lld_macro: '{#PROJECT.DESCRIPTION}'
+              path: $.description
+            - lld_macro: '{#PROJECT.NAME}'
+              path: $.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+        - uuid: 4bb23e638fd647b1b5497b21c7363992
+          name: 'Incus: Storage pools discovery'
+          type: DEPENDENT
+          key: incus.discovery.storage.pools
+          filter:
+            evaltype: AND
+            conditions:
+              - macro: '{#POOL.NAME}'
+                value: '{$INCUS.POOL.IGNORE}'
+                operator: NOT_MATCHES_REGEX
+          description: 'Discovers all storage pools'
+          item_prototypes:
+            - uuid: e3e9667f68a94a839ed8f78ce48c15e5
+              name: 'Incus: Storage pool [{#POOL.NAME}] driver'
+              type: DEPENDENT
+              key: 'incus.pool.driver[{#POOL.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Storage pool driver (zfs, btrfs, lvm, dir, etc.)'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#POOL.NAME}")].driver.first()'
+              master_item:
+                key: incus.api.storage_pools
+              tags:
+                - tag: component
+                  value: storage
+                - tag: pool
+                  value: '{#POOL.NAME}'
+            - uuid: 00a484508af844d7a04d3f4c55f53eb0
+              name: 'Incus: Storage pool [{#POOL.NAME}] inodes total'
+              type: DEPENDENT
+              key: 'incus.pool.inodes.total[{#POOL.NAME}]'
+              history: 7d
+              description: 'Total number of inodes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#POOL.NAME}")].resources.inodes.total.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.storage_pools
+              tags:
+                - tag: component
+                  value: storage
+                - tag: pool
+                  value: '{#POOL.NAME}'
+            - uuid: 4ce3b0c6ad8f459ea75b219969e2d7f5
+              name: 'Incus: Storage pool [{#POOL.NAME}] inodes used'
+              type: DEPENDENT
+              key: 'incus.pool.inodes.used[{#POOL.NAME}]'
+              history: 7d
+              description: 'Number of inodes used'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#POOL.NAME}")].resources.inodes.used.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.storage_pools
+              tags:
+                - tag: component
+                  value: storage
+                - tag: pool
+                  value: '{#POOL.NAME}'
+            - uuid: 6c989f8d84394a34bf6114c00b4cbc7a
+              name: 'Incus: Storage pool [{#POOL.NAME}] space % used'
+              type: CALCULATED
+              key: 'incus.pool.space.pused[{#POOL.NAME}]'
+              delay: '{$INCUS.DATA.INTERVAL}'
+              history: 7d
+              value_type: FLOAT
+              units: '%'
+              params: '100*last(//incus.pool.space.used[{#POOL.NAME}])/(last(//incus.pool.space.total[{#POOL.NAME}])+0.0001)'
+              description: 'Percentage of space used'
+              tags:
+                - tag: component
+                  value: storage
+                - tag: pool
+                  value: '{#POOL.NAME}'
+              trigger_prototypes:
+                - uuid: 9ea4f3056542424dba73c6d4dceba5f6
+                  expression: 'last(/Incus Cluster by HTTP/incus.pool.space.pused[{#POOL.NAME}])>{$INCUS.STORAGE.PUSED.CRIT} and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Storage pool [{#POOL.NAME}] space critical ({ITEM.LASTVALUE}%)'
+                  priority: HIGH
+                  description: 'Storage pool space usage exceeds critical threshold'
+                  tags:
+                    - tag: pool
+                      value: '{#POOL.NAME}'
+                    - tag: scope
+                      value: capacity
+                - uuid: 64895476e34849b480fa9c00f04cf86f
+                  expression: 'last(/Incus Cluster by HTTP/incus.pool.space.pused[{#POOL.NAME}])>{$INCUS.STORAGE.PUSED.WARN} and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Storage pool [{#POOL.NAME}] space low ({ITEM.LASTVALUE}%)'
+                  priority: WARNING
+                  description: 'Storage pool space usage exceeds warning threshold'
+                  tags:
+                    - tag: pool
+                      value: '{#POOL.NAME}'
+                    - tag: scope
+                      value: capacity
+            - uuid: e0cb8fe5dc9441faa38cea47e84773b3
+              name: 'Incus: Storage pool [{#POOL.NAME}] space total'
+              type: DEPENDENT
+              key: 'incus.pool.space.total[{#POOL.NAME}]'
+              history: 7d
+              units: B
+              description: 'Total space in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#POOL.NAME}")].resources.space.total.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.storage_pools
+              tags:
+                - tag: component
+                  value: storage
+                - tag: pool
+                  value: '{#POOL.NAME}'
+            - uuid: e37229ce4f674b4e91e777bf7c5e9956
+              name: 'Incus: Storage pool [{#POOL.NAME}] space used'
+              type: DEPENDENT
+              key: 'incus.pool.space.used[{#POOL.NAME}]'
+              history: 7d
+              units: B
+              description: 'Space used in bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#POOL.NAME}")].resources.space.used.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: incus.api.storage_pools
+              tags:
+                - tag: component
+                  value: storage
+                - tag: pool
+                  value: '{#POOL.NAME}'
+            - uuid: 02021ec7487d4e218607232cb66cfcee
+              name: 'Incus: Storage pool [{#POOL.NAME}] status'
+              type: DEPENDENT
+              key: 'incus.pool.status[{#POOL.NAME}]'
+              history: 7d
+              value_type: TEXT
+              description: 'Storage pool status'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.metadata[?(@.name=="{#POOL.NAME}")].status.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: Unknown
+              master_item:
+                key: incus.api.storage_pools
+              tags:
+                - tag: component
+                  value: storage
+                - tag: pool
+                  value: '{#POOL.NAME}'
+              trigger_prototypes:
+                - uuid: b718c98908614b6ea47b27c6c79fec6e
+                  expression: 'last(/Incus Cluster by HTTP/incus.pool.status[{#POOL.NAME}])<>"Created" and {$INCUS.MAINTENANCE}=0'
+                  name: 'Incus: Storage pool [{#POOL.NAME}] unavailable'
+                  priority: HIGH
+                  description: 'Storage pool is not in Created status'
+                  tags:
+                    - tag: pool
+                      value: '{#POOL.NAME}'
+                    - tag: scope
+                      value: availability
+          graph_prototypes:
+            - uuid: 4348d2e0791b4c42a9d24390737b1de7
+              name: 'Incus: Storage pool [{#POOL.NAME}] space usage'
+              graph_items:
+                - color: 1A7C11
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.pool.space.used[{#POOL.NAME}]'
+                - color: 2774A4
+                  calc_fnc: ALL
+                  item:
+                    host: 'Incus Cluster by HTTP'
+                    key: 'incus.pool.space.total[{#POOL.NAME}]'
+          master_item:
+            key: incus.api.storage_pools
+          lld_macro_paths:
+            - lld_macro: '{#POOL.DRIVER}'
+              path: $.driver
+            - lld_macro: '{#POOL.NAME}'
+              path: $.name
+            - lld_macro: '{#POOL.STATUS}'
+              path: $.status
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.metadata
+      macros:
+        - macro: '{$INCUS.API.HOST}'
+          value: localhost
+          description: 'Incus server hostname or IP (cluster entry point)'
+        - macro: '{$INCUS.API.PORT}'
+          value: '8443'
+          description: 'Incus API port'
+        - macro: '{$INCUS.API.SCHEME}'
+          value: https
+          description: 'Protocol scheme (https recommended)'
+        - macro: '{$INCUS.CLUSTER.FAILOVER}'
+          value: '1'
+          description: 'Set to 0 for standalone Incus (disables failover)'
+        - macro: '{$INCUS.CPU.PUSED.CRIT}'
+          value: '95'
+          description: 'Instance CPU % used critical threshold'
+        - macro: '{$INCUS.CPU.PUSED.WARN}'
+          value: '80'
+          description: 'Instance CPU % used warning threshold'
+        - macro: '{$INCUS.DATA.INTERVAL}'
+          value: 5m
+          description: 'Master data collection interval'
+        - macro: '{$INCUS.DISCOVERY.INTERVAL}'
+          value: 1h
+          description: 'Discovery interval for new resources'
+        - macro: '{$INCUS.HEALTH.INTERVAL}'
+          value: 30s
+          description: 'API health check interval'
+        - macro: '{$INCUS.IMAGE.IGNORE}'
+          value: '^$'
+          description: 'Regex pattern to ignore images'
+        - macro: '{$INCUS.INSTANCE.IGNORE}'
+          value: '^$'
+          description: 'Regex pattern to ignore instances (empty = none)'
+        - macro: '{$INCUS.INSTANCE.TRACK_CHANGES}'
+          value: '1'
+          description: 'Set to 0 to disable instance state change events'
+        - macro: '{$INCUS.INTERFACE.IGNORE}'
+          value: ^(lo)$
+          description: 'Regex pattern to ignore network interfaces'
+        - macro: '{$INCUS.MAINTENANCE}'
+          value: '0'
+          description: 'Set to 1 to suppress all triggers during maintenance'
+        - macro: '{$INCUS.MEMORY.PUSED.CRIT}'
+          value: '95'
+          description: 'Instance memory % used critical threshold'
+        - macro: '{$INCUS.MEMORY.PUSED.WARN}'
+          value: '80'
+          description: 'Instance memory % used warning threshold'
+        - macro: '{$INCUS.METRICS.INTERVAL}'
+          value: 1m
+          description: 'Prometheus metrics polling interval'
+        - macro: '{$INCUS.NETWORK.IGNORE}'
+          value: '^(lo|docker[0-9]*|veth.*|br-[a-f0-9]+)$'
+          description: 'Regex pattern to ignore networks'
+        - macro: '{$INCUS.POOL.IGNORE}'
+          value: '^$'
+          description: 'Regex pattern to ignore storage pools'
+        - macro: '{$INCUS.PROJECT.IGNORE}'
+          value: '^$'
+          description: 'Regex pattern to ignore projects'
+        - macro: '{$INCUS.SNAPSHOT.MAXAGE}'
+          value: 7d
+          description: 'Maximum snapshot age before warning'
+        - macro: '{$INCUS.STATE.INTERVAL}'
+          value: 1m
+          description: 'Instance state polling interval'
+        - macro: '{$INCUS.STORAGE.PUSED.CRIT}'
+          value: '95'
+          description: 'Storage pool % used critical threshold'
+        - macro: '{$INCUS.STORAGE.PUSED.WARN}'
+          value: '80'
+          description: 'Storage pool % used warning threshold'
+        - macro: '{$INCUS.TLS.CA}'
+          value: /etc/zabbix/ssl/incus/server.crt
+          description: 'Path to Incus server CA certificate'
+        - macro: '{$INCUS.TLS.CERT}'
+          value: incus-client.crt
+          description: 'Path to TLS client certificate'
+        - macro: '{$INCUS.TLS.KEY}'
+          value: incus-client.key
+          description: 'Path to TLS client private key'
+      valuemaps:
+        - uuid: 336ac5587c554b4ea72eb0f4987ea061
+          name: 'Incus Boolean'
+          mappings:
+            - value: '0'
+              newvalue: 'No'
+            - value: '1'
+              newvalue: 'Yes'
+        - uuid: 5de9842c7c8343229d298f70c07095c2
+          name: 'Incus Instance Status'
+          mappings:
+            - value: '100'
+              newvalue: 'Operation created'
+            - value: '101'
+              newvalue: Started
+            - value: '102'
+              newvalue: Stopped
+            - value: '103'
+              newvalue: Running
+            - value: '104'
+              newvalue: Cancelling
+            - value: '105'
+              newvalue: Pending
+            - value: '106'
+              newvalue: Starting
+            - value: '107'
+              newvalue: Stopping
+            - value: '108'
+              newvalue: Aborting
+            - value: '109'
+              newvalue: Freezing
+            - value: '110'
+              newvalue: Frozen
+            - value: '111'
+              newvalue: Thawed
+            - value: '112'
+              newvalue: Error
+            - value: '113'
+              newvalue: Ready
+        - uuid: 178ce2388b054ab180e1636bbbc6fbaa
+          name: 'Incus Member Status'
+          mappings:
+            - value: Online
+              newvalue: Online
+            - value: Offline
+              newvalue: Offline
+            - value: Evacuated
+              newvalue: Evacuated
+            - value: Blocked
+              newvalue: Blocked
+  triggers:
+    - uuid: 3e6b415ef266443a9824b9e906adb4aa
+      expression: 'last(/Incus Cluster by HTTP/incus.cluster.members.online)<last(/Incus Cluster by HTTP/incus.cluster.members.count) and last(/Incus Cluster by HTTP/incus.cluster.enabled)=1 and {$INCUS.MAINTENANCE}=0'
+      name: 'Incus: Cluster member offline ({ITEM.LASTVALUE1} of {ITEM.LASTVALUE2} online)'
+      priority: HIGH
+      description: 'One or more cluster members are not in Online status'
+      dependencies:
+        - name: 'Incus: API unreachable'
+          expression: 'nodata(/Incus Cluster by HTTP/incus.api.health,5m)=1 and {$INCUS.MAINTENANCE}=0'
+      tags:
+        - tag: scope
+          value: availability
+    - uuid: 6bec89da04e04787a849f8c88917dcbe
+      expression: 'last(/Incus Cluster by HTTP/incus.instances.running)=0 and last(/Incus Cluster by HTTP/incus.instances.total)>0 and {$INCUS.MAINTENANCE}=0'
+      name: 'Incus: No running instances'
+      priority: INFO
+      description: 'All instances are stopped - this may be intentional'
+      tags:
+        - tag: scope
+          value: notice
